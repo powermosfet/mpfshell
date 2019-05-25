@@ -43,7 +43,7 @@ from mp.tokenizer import Tokenizer
 
 
 class MpFileShell(cmd.Cmd):
-    def __init__(self, color=False, caching=False, reset=False):
+    def __init__(self, color=False, caching=False, reset=False, exit_character=None):
         if color:
             colorama.init()
             cmd.Cmd.__init__(self, stdout=colorama.initialise.wrapped_stdout)
@@ -56,6 +56,7 @@ class MpFileShell(cmd.Cmd):
         self.color = color
         self.caching = caching
         self.reset = reset
+        self.exit_character = exit_character or default_exit_character()
 
         self.fe = None
         self.repl = None
@@ -601,10 +602,7 @@ class MpFileShell(cmd.Cmd):
 
                 self.repl = Term(self.fe.con)
 
-                if platform.system() == "Windows":
-                    self.repl.exit_character = chr(0x11)
-                else:
-                    self.repl.exit_character = chr(0x1D)
+                self.repl.exit_character = self.exit_character
 
                 self.repl.raw = True
                 self.repl.set_rx_encoding("UTF-8")
@@ -616,10 +614,7 @@ class MpFileShell(cmd.Cmd):
             self.fe.teardown()
             self.repl.start()
 
-            if self.repl.exit_character == chr(0x11):
-                print("\n*** Exit REPL with Ctrl+Q ***")
-            else:
-                print("\n*** Exit REPL with Ctrl+] ***")
+            print("\n*** Exit REPL with {} ***".format(show_exit_character(self.repl.exit_character)))
 
             try:
                 self.repl.join(True)
@@ -702,6 +697,18 @@ class MpFileShell(cmd.Cmd):
             os.unlink(tmp)
     complete_putc = complete_mpyc
 
+def show_exit_character(exit_character):
+    return {
+        chr(0x1D): "Ctrl+]",
+        chr(0x11): "Ctrl+Q",
+        chr(0x18): "Ctrl+X"
+    }[exit_character]
+
+def default_exit_character():
+    if platform.system() == "Windows":
+        return chr(0x11)
+    else:
+        return chr(0x1D)
 
 def main():
 
@@ -756,6 +763,13 @@ def main():
     parser.add_argument(
         "board", help="directly opens board", nargs="?", action="store", default=None
     )
+    parser.add_argument(
+        "--ctrl-x",
+        help="Use Ctrl+X to exit REPL instead of the default",
+        action="store_const",
+        const=chr(0x18),
+        dest="exit_character"
+    )
 
     args = parser.parse_args()
 
@@ -772,7 +786,7 @@ def main():
         % (sys.version_info[0], sys.version_info[1], serial.VERSION)
     )
 
-    mpfs = MpFileShell(not args.nocolor, not args.nocache, args.reset)
+    mpfs = MpFileShell(not args.nocolor, not args.nocache, args.reset, args.exit_character)
 
     if args.open is not None:
         if args.board is None:
